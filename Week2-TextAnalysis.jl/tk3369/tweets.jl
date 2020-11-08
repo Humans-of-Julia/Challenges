@@ -69,33 +69,34 @@ We will take a look at the data and get a little more understanding about what's
 describe(df, :eltype, :nmissing, :first => first)
 
 # ╔═╡ 4797ae3c-1ff2-11eb-3f31-f32f365ea0ee
-histogram(df.airline_sentiment_confidence, legend = nothing, title = "Airline Sentiment Confidence")
+histogram(df.airline_sentiment_confidence;
+	legend = nothing, 
+	title = "Airline Sentiment Confidence")
 
 # ╔═╡ bec8eb92-1ff2-11eb-033d-ff5d3be4df0a
 let x = combine(groupby(df, :airline), nrow)
-	bar(x.airline, x.nrow, label = "Airline")
+	bar(x.airline, x.nrow; title = "Airlines", label = :none)
 end
 
 # ╔═╡ 2fa37940-1ff3-11eb-01ef-813c561d5679
 let x = combine(groupby(df, :airline_sentiment), nrow)
 	bar(x.airline_sentiment, x.nrow;
-		label = "Airline Sentiment",
-		legend = :topleft)
+		title = "Airline Sentiment",
+		label = :none,
+		legend = :topright)
 end
 
 # ╔═╡ 747a707c-1ff4-11eb-2681-6b6787174d0e
 let x = combine(groupby(dropmissing(df, :negativereason), :negativereason), nrow)
-	bar(x.negativereason, x.nrow, label = "Negative Reason", rotation = 45)
+	bar(x.negativereason, x.nrow;
+		title = "Negative Reasons", label = :none, rotation = 45)
 end
-
-# ╔═╡ 5248a178-1ff3-11eb-383e-993d9e6287d9
-unique(df.negativereason)
 
 # ╔═╡ 5ca1e714-1f8b-11eb-30fd-dbdd6e574805
 md"""
 # Examining tweets
 
-The Tweets.csv file contains over 14,000 tweets. Let's quickly examine some individual data.
+The CSV file contains over 14,000 tweets. Let's quickly examine some individual data.
 """
 
 # ╔═╡ 097e9b2c-1ff4-11eb-255d-1d0816f3ddee
@@ -112,7 +113,7 @@ function table(nt)
 		println(io, "|`", k, "`|", nt[k], "|")
 	end
 	Markdown.parse(String(take!(io)))
-end
+end;
 
 # ╔═╡ 32974c34-1ff4-11eb-18ea-67999c24906a
 md"""
@@ -136,28 +137,40 @@ Nice RT @VirginAmerica: Vibe with the moodlight from takeoff to touchdown. #Mood
 ```
 
 This is a tricky one because it contins all of the followings:
-- user mention
-- hash tag
-- URL
-- Shorthand such as RT (for retweet)
+- mention (`@VirginAmeria`)
+- hash tag (`#MoodlitMonday` and `#ScienceBehindTheExperience`)
+- URL (`http://t.co/Y7O0uNxTQP`)
+
+Technically `RT` is a shorthand for "retweet" so perhaps it should be expanded but let's not worry about that for now.
 """
 
 # ╔═╡ b231f13c-1ff0-11eb-278d-43db738ca57f
 md"""
 ## Handling mentions and hashtags
+"""
 
-Because mentions(`@`) and hashtags(`#`) look like punctuations, the standard tokenizer would have taken them away. It would be wrong to consider someone like `@happy` as the same as `["@", "happy"]` because the tweet could have been classified with positive sentiment rather than a neutral stance as it is really just a reference to a user name.
+# ╔═╡ f0def652-2156-11eb-1a74-c1684e61bf2b
+md"Let's see how the default tokenizer behaves using the `ngrams` function"
+
+# ╔═╡ d9a0e810-2156-11eb-0aa3-e7b8a37987f1
+ngrams(StringDocument(df[36, :text])) |> table
+
+# ╔═╡ d5c793ba-2156-11eb-1185-c782b09f9d96
+md"""
+Because mentions(`@`) and hashtags(`#`) look like punctuations, the standard tokenizer would have taken them apart from the text that follows. It would be wrong to consider someone like `@happy` as the same as `["@", "happy"]` because the tweet could have been classified with positive sentiment rather than being neutral as it is really just a reference to a user name and not literally the word "happy".
+
+Further, the URL was broken up into pieces.
 
 There are several ways to handle this:
 
 1. Use `WordTokenizers.tweet_tokenize` function to tokenize the tweet. This tokenizer is aware of mentions and hashtags and it would keep them intact with the text that follows.
 
-2. Extract mentions and hashtags from the tweet and replace them with empty string.
+2. Extract mentions and hashtags from the tweet and replace them with empty string. I would think that mentions should always be considered neutral. Hashtags is a little trickier as it could be used to expressed sentiment as well. For simplicity reasons though, maybe it does not matter as much.
 """
 
 # ╔═╡ 89533ac8-1ff5-11eb-0838-21d9d514ab8a
 md"""
-For now, let's go with approach #1. Taking advice from Oxinabox from Slack, I can set the default tokenizer with the tweet tokenizer provided by `WordsTokenizers` package.
+For now, let's go with approach #1. Taking advice from Lyndon White, I can set the default tokenizer with the tweet tokenizer provided by `WordsTokenizers` package.
 """
 
 # ╔═╡ 04c821e0-1fe0-11eb-3a1b-670c5ff35a90
@@ -166,9 +179,15 @@ const WT = TextAnalysis.WordTokenizers;
 # ╔═╡ 1c0b8dea-1fe0-11eb-19a2-49a1af2ed48c
 WT.set_tokenizer(WT.tweet_tokenize);
 
+# ╔═╡ e5251e20-2158-11eb-283f-bbf7e8380c4b
+md"Let's try again."
+
+# ╔═╡ db856a76-2158-11eb-08d1-8f38f28cdc91
+ngrams(StringDocument(df[36, :text])) |> table
+
 # ╔═╡ b636fc32-1ff5-11eb-048e-cbc4a77c5f75
 md"""
-Let me experiment some preprocessing facilities.
+I'll play with some preprocessing facilities.
 """
 
 # ╔═╡ 6cb54136-1f8c-11eb-21d0-1542ddd12437
@@ -184,7 +203,9 @@ end
 
 # ╔═╡ cd6619b0-1ff5-11eb-19f5-092f2f06b172
 md"""
-Right off the bat, I can see some problems here. It seems that when I stripped punctuations, it also took the mention and hashtag away. Also, the URL became weird. So let me get rid of the `strip_punctuation` preparation step for now.
+Right off the bat, I can see some problems here. It seems that when I stripped punctuations, it also took the `@` and `#` signs away. The URL also became weird.  Oh yeah, that's stripping punctuation means, right? :-)
+
+Let me get rid of the `strip_punctuation` preparation step and see hat happens.
 """
 
 # ╔═╡ 3247ecdc-1ff6-11eb-2a79-85b10f64a651
@@ -206,7 +227,7 @@ Now, the mention and hashtag are back to normal. The URL has gotten better but s
 md"""
 I'm torn. How can I make it not mess around with my mentions, hashtags, and URLs? Maybe I will take approach #2 now. I can certainly extract these data first before tokenizing the text.
 
-This idea came from José Bayoán Santiago Calderón from Slack. 
+This neat idea came from José Bayoán Santiago Calderón when I asked the question on Slack. 
 """
 
 # ╔═╡ 9e3133ea-1ff6-11eb-3857-4f2dd7436ccb
@@ -214,7 +235,7 @@ let s = df[36, :text]
 	
 	mention_regex = r"@\w+"
 	hashtag_regex = r"#\w+"
-	url_regex = r"http[\w:/.]+"
+	url_regex = r"http[\w:/.-]+"
 	
 	mentions = collect(x.match for x in eachmatch(mention_regex, s))
 	hashtags = collect(x.match for x in eachmatch(hashtag_regex, s))
@@ -240,7 +261,7 @@ end
 md"""
 This strategy seems to work well. Let's make a copy of the data frame and start doing some analysis. 
 
-P.S. I could have modified the original data frame but I would rather not do that because it will mess up the earlier part of this Pluto notebook.
+P.S. I could have modified the original data frame but I would rather not do that because it will mess up the earlier part of this Pluto notebook because the cells are reactive in Pluto.
 """
 
 # ╔═╡ fd1a4328-1ff7-11eb-0b7f-2d62c0e9d0df
@@ -263,12 +284,9 @@ end;
 
 # ╔═╡ b3b62480-1ff8-11eb-3ef9-7985882f19d4
 function remove_extracted_text(s)
-	mention_regex = r"@\w+"
-	hashtag_regex = r"#\w+"
-	url_regex = r"http[\w:/.]+"
-	s = replace(s, mention_regex => "")
-	s = replace(s, hashtag_regex => "")
-	s = replace(s, url_regex => "")
+	s = replace(s, r"@\w+" => "")   # mentions
+	s = replace(s, r"#\w+" => "")   # hashtags
+	s = replace(s, r"http[\w:/.]+" => "")  # url's
 	return s
 end;
 
@@ -285,6 +303,16 @@ end;
 # ╔═╡ 91e59d40-1ff8-11eb-0fab-df3732a771c2
 table(df2[36, :])
 
+# ╔═╡ de6d7008-215a-11eb-1082-dd3adfb676e6
+md"""
+As you can see, the mentions/hashtags/urls are extracted into separate columns in the data frame. The `x_text` field contains the cleaned version of `text`.
+"""
+
+# ╔═╡ 04c250b6-215b-11eb-0db9-9b86420f0d6f
+md"""
+If we do more text processing on `x_text` column, then it looks a lot more reaonsable and without any noise.
+"""
+
 # ╔═╡ d85f3010-1ff8-11eb-1d79-e338a3292aac
 let	sd = StringDocument(lowercase(df2[36, :x_text]))
 	op = 0x00
@@ -292,9 +320,11 @@ let	sd = StringDocument(lowercase(df2[36, :x_text]))
 	op |= strip_stopwords
 	op |= strip_html_tags
 	prepare!(sd, op)
-	stem!(sd)
 	table(ngrams(sd))
 end
+
+# ╔═╡ 2ecde92c-215b-11eb-1355-c991408f033d
+md"Let's just define a function to do that work."
 
 # ╔═╡ 238efc32-1ff9-11eb-3887-17016268dfe2
 function tweet_string_doc(s::AbstractString)
@@ -304,9 +334,11 @@ function tweet_string_doc(s::AbstractString)
 	op |= strip_stopwords
 	op |= strip_html_tags
 	prepare!(sd, op)
-	# stem!(sd)
 	return TextAnalysis.text(sd) == "" ? missing : sd
 end;
+
+# ╔═╡ 403e6d8c-215b-11eb-13f1-01664cc92f25
+md"TextAnalysis.jl supports ngrams and so we could convert a `StringDocument` to an `NGramDocument`."
 
 # ╔═╡ 51471144-1ffb-11eb-37da-2595a74dbc64
 function tweet_ngrams(sd::StringDocument, n = 1)
@@ -317,8 +349,14 @@ function tweet_ngrams(sd::StringDocument, n = 1)
 	end
 end;
 
+# ╔═╡ 579dc630-215b-11eb-0b8f-b3571a66ba31
+md"Define a simple `passmissing` function to handle missing data"
+
 # ╔═╡ 904da938-1ffc-11eb-19ea-199dffd8d2c6
 passmissing(f) = x -> ismissing(x) ? missing : f(x);
+
+# ╔═╡ 6491d426-215b-11eb-109d-85e7fb7dfd34
+md"Now, I can create `StringDocument` and `NGramDocument` columns (both 1- and 2-grams) in the data frame."
 
 # ╔═╡ 433d3410-1ff9-11eb-235a-b147f848c2cf
 begin
@@ -342,7 +380,7 @@ md"""
 """
 
 # ╔═╡ e3d9d5a0-20c6-11eb-00b6-51149f33ed3e
-md"Here are the top 10 words"
+md"Using 1-gram column, we can build a corpus and display the top 10 words."
 
 # ╔═╡ cb06dd12-1ffa-11eb-3f46-cf0f210fce5e
 let
@@ -357,7 +395,7 @@ let
 end
 
 # ╔═╡ ef40a858-20c6-11eb-3506-7f477e79cd74
-md"Here are the top 2-grams"
+md"I can play the same trick with 2-grams."
 
 # ╔═╡ 06fdc4d2-1ffd-11eb-04c9-0b4f549d9530
 let
@@ -377,7 +415,7 @@ md"""
 """
 
 # ╔═╡ 939eb5da-2139-11eb-019d-3b005ec5057c
-md"Just trying out various functions in TextAnalysis.jl"
+md"Just playing with various functions in TextAnalysis.jl"
 
 # ╔═╡ 54c37efe-2005-11eb-27b8-9ff7e99e6f86
 begin
@@ -412,7 +450,7 @@ md"""
 """
 
 # ╔═╡ 3f30da46-2125-11eb-2ce7-7d44fb7229d0
-md"The following sample code came from [this TextAnalysis.jl doc string](https://github.com/JuliaText/TextAnalysis.jl/blob/5f4edf9b39f8aa16c2aa47f109ae0d7971ceeef6/src/bayes.jl#L41-L63)."
+md"To learn about the classifier, I have copied the following sample code from [this TextAnalysis.jl doc string](https://github.com/JuliaText/TextAnalysis.jl/blob/5f4edf9b39f8aa16c2aa47f109ae0d7971ceeef6/src/bayes.jl#L41-L63)."
 
 # ╔═╡ 3694136e-2123-11eb-2fec-fd182545e5bb
 let m = NaiveBayesClassifier([:spam, :non_spam])
@@ -436,12 +474,13 @@ In our data frame, we already have a column `x_string_doc` with `StringDocuments
 """
 
 # ╔═╡ 76ab55ba-2124-11eb-3999-71ce72708dd3
-model = let classes = unique(df2.airline_sentiment)
-	m = NaiveBayesClassifier(classes)
+model = let 
+	classes = unique(df2.airline_sentiment)
+	nbc = NaiveBayesClassifier(classes)
 	for (sd, class) in zip(df2.x_string_doc , df2.airline_sentiment)
-		fit!(m, sd, class) 
+		fit!(nbc, sd, class) 
 	end
-	m
+	nbc
 end;
 
 # ╔═╡ 983678c6-2125-11eb-07a7-29321450d287
@@ -467,7 +506,7 @@ function test_model(predictor)
 end;
 
 # ╔═╡ 1df399ee-212d-11eb-2096-5189f234cb29
-test_model(x -> predict(model, x))
+test_model(x -> predict(model, tweet_string_doc(x)))
 
 # ╔═╡ c76ff982-2125-11eb-2d1b-c11a49051108
 md"""
@@ -503,11 +542,11 @@ md"Creating an ngram model is fairly straightforward."
 ngrams_model = let 
 	words = collect(keys(lexicon(crps)))
 	classes = unique(df2.airline_sentiment)
-	m = NaiveBayesClassifier(words, classes)
+	nbc = NaiveBayesClassifier(words, classes)
 	for (ngd, class) in zip(df2.x_ngrams , df2.airline_sentiment)
-		fit!(m, ngd, class) 
+		fit!(nbc, ngd, class) 
 	end
-	m
+	nbc
 end;
 
 # ╔═╡ 30414e62-212f-11eb-0a7b-f55ba0abce09
@@ -515,7 +554,7 @@ md"For testing, define a predictor function that takes any string (`x`) and it w
 
 # ╔═╡ 910c5d08-212b-11eb-128e-4d112e08f255
 function ngram_predictor(model)
-	features(x) = TextAnalysis.features(ngrams(StringDocument(x)), ngrams_model.dict)
+	features(x) = TextAnalysis.features(ngrams(tweet_string_doc(x)), ngrams_model.dict)
 	return x -> predict(model, features(x))
 end;
 
@@ -529,7 +568,7 @@ test_model(ngram_predictor(ngrams_model))
 md"Let's compare with the result from using `StringDocument`. As expected, they are the same."
 
 # ╔═╡ 90074a74-212d-11eb-18c1-4fd523eeec4e
-test_model(x -> predict(model, x))
+test_model(x -> predict(model, tweet_string_doc(x)))
 
 # ╔═╡ 02494270-2130-11eb-1342-390a8240d584
 md"""
@@ -587,9 +626,11 @@ md"""
 
 Things that I'd like to do but don't have time at the moment.
 
-1. Try n-gram with 1 and 2 words and see if it predicts better. However, this will explode the number of features a lot. Just doing 1-gram already gives 12K features.
+1. Try 2-grams and see if it predicts better. However, this will explode the number of features a lot. Just doing 1-gram already gives 12K features.
 
 2. Stemming will probably reduce the size. Not sure how it affects predictive power.
+
+3. Splitting into train/test sets and do cross validations.
 """
 
 # ╔═╡ Cell order:
@@ -608,7 +649,6 @@ Things that I'd like to do but don't have time at the moment.
 # ╠═bec8eb92-1ff2-11eb-033d-ff5d3be4df0a
 # ╠═2fa37940-1ff3-11eb-01ef-813c561d5679
 # ╠═747a707c-1ff4-11eb-2681-6b6787174d0e
-# ╠═5248a178-1ff3-11eb-383e-993d9e6287d9
 # ╟─5ca1e714-1f8b-11eb-30fd-dbdd6e574805
 # ╟─097e9b2c-1ff4-11eb-255d-1d0816f3ddee
 # ╠═74192f10-1fe0-11eb-3eea-1d9cbc0c4c3b
@@ -618,9 +658,14 @@ Things that I'd like to do but don't have time at the moment.
 # ╠═cbcac7e6-1fe0-11eb-0820-9f4c6f3fa51f
 # ╟─dd832f9c-1f8a-11eb-001b-3d8be911d80a
 # ╟─b231f13c-1ff0-11eb-278d-43db738ca57f
+# ╟─f0def652-2156-11eb-1a74-c1684e61bf2b
+# ╠═d9a0e810-2156-11eb-0aa3-e7b8a37987f1
+# ╠═d5c793ba-2156-11eb-1185-c782b09f9d96
 # ╟─89533ac8-1ff5-11eb-0838-21d9d514ab8a
 # ╠═04c821e0-1fe0-11eb-3a1b-670c5ff35a90
 # ╠═1c0b8dea-1fe0-11eb-19a2-49a1af2ed48c
+# ╟─e5251e20-2158-11eb-283f-bbf7e8380c4b
+# ╠═db856a76-2158-11eb-08d1-8f38f28cdc91
 # ╟─b636fc32-1ff5-11eb-048e-cbc4a77c5f75
 # ╠═3df9b88c-1fe0-11eb-1032-31d3baa1a91b
 # ╠═6cb54136-1f8c-11eb-21d0-1542ddd12437
@@ -636,10 +681,16 @@ Things that I'd like to do but don't have time at the moment.
 # ╠═b3b62480-1ff8-11eb-3ef9-7985882f19d4
 # ╠═457104ae-1ff8-11eb-04d8-536205dc3fc9
 # ╠═91e59d40-1ff8-11eb-0fab-df3732a771c2
+# ╟─de6d7008-215a-11eb-1082-dd3adfb676e6
+# ╟─04c250b6-215b-11eb-0db9-9b86420f0d6f
 # ╠═d85f3010-1ff8-11eb-1d79-e338a3292aac
+# ╟─2ecde92c-215b-11eb-1355-c991408f033d
 # ╠═238efc32-1ff9-11eb-3887-17016268dfe2
+# ╟─403e6d8c-215b-11eb-13f1-01664cc92f25
 # ╠═51471144-1ffb-11eb-37da-2595a74dbc64
+# ╟─579dc630-215b-11eb-0b8f-b3571a66ba31
 # ╠═904da938-1ffc-11eb-19ea-199dffd8d2c6
+# ╟─6491d426-215b-11eb-109d-85e7fb7dfd34
 # ╠═433d3410-1ff9-11eb-235a-b147f848c2cf
 # ╟─9f723aa8-20c6-11eb-094e-d96421b204ee
 # ╠═cd29da32-20c6-11eb-3e3b-adca4d3d31f4
