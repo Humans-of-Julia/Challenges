@@ -1,6 +1,6 @@
-# WeeklyContest
+# HoJ Challenges
 
-This repo contains weekly contest submissions.
+This repo contains the submissions for the challenges posted at the Humans of Julia Discord server.
 
 ## License
 
